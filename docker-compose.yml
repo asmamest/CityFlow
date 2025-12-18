@@ -1,0 +1,247 @@
+version: '3.8'
+
+networks:
+  smart-city-network:
+    driver: bridge
+    name: smart-city-network
+
+volumes:
+  postgres_data:
+    name: smart-city-postgres-data
+
+services:
+  # ============================================================
+  # BASE DE DONNÉES POSTGRESQL
+  # ============================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: smart-city-postgres
+    environment:
+      POSTGRES_USER: mobility_user
+      POSTGRES_PASSWORD: mobility_pass
+      POSTGRES_DB: mobility_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mobility_user -d mobility_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - smart-city-network
+    restart: unless-stopped
+
+  # ============================================================
+  # SERVICE MOBILITÉ (REST)
+  # ============================================================
+  mobility-service:
+    build:
+      context: ./services/mobility-service
+      dockerfile: Dockerfile
+    container_name: mobility-service
+    environment:
+      DATABASE_URL: postgresql://mobility_user:mobility_pass@postgres:5432/mobility_db
+      PORT: 8000
+      HOST: 0.0.0.0
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - smart-city-network
+    volumes:
+      - ./services/mobility-service:/app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # ============================================================
+  # SERVICE QUALITÉ DE L'AIR (SOAP)
+  # ============================================================
+  air-quality-soap-service:
+    build:
+      context: ./services/air-quality-soap-service
+      dockerfile: Dockerfile
+    container_name: air-quality-soap-service
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8000
+      LOG_LEVEL: INFO
+      WORKERS: 4
+      DATABASE_URL: postgresql+psycopg2://mobility_user:mobility_pass@smart-city-postgres:5432/mobility_db
+      DATA_SOURCE: data/air_quality_data.csv
+    ports:
+      - "8001:8000"
+    networks:
+      - smart-city-network
+    volumes:
+      - ./services/air-quality-soap-service/logs:/app/logs
+      - ./services/air-quality-soap-service/data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/?wsdl')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+
+
+  air-quality-soap-rest:
+      image: python:3.11-slim
+      container_name: air-quality-soap-rest
+      working_dir: /app
+      volumes:
+        - ./services/air-quality-soap-service:/app
+      command: >
+        sh -c "pip install --no-cache-dir -r requirements.txt &&
+              uvicorn soap_wrapper:app --host 0.0.0.0 --port 8002"
+      ports:
+        - "8002:8002"
+      environment:
+        - SOAP_SERVICE_URL=http://air-quality-soap-service:8000
+      depends_on:
+        air-quality-soap-service:
+          condition: service_healthy
+      networks:
+        - smart-city-network
+      restart: unless-stopped
+  # ============================================================
+  # SERVICE URGENCES (gRPC)
+  # ============================================================
+  emergency-grpc:
+    build:
+      context: ./services/emergency-grpc-service
+      dockerfile: Dockerfile
+    container_name: emergency-grpc-service
+    environment:
+      GRPC_PORT: 50051
+      LOG_LEVEL: INFO
+      PYTHONPATH: "/app:/app/protos"
+    ports:
+      - "50051:50051"
+    networks:
+      - smart-city-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import grpc; from protos import emergency_pb2, emergency_pb2_grpc; channel = grpc.insecure_channel('localhost:50051'); stub = emergency_pb2_grpc.EmergencyAlertServiceStub(channel); stub.HealthCheck(emergency_pb2.HealthCheckRequest())"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  # ============================================================
+  # SERVICE ÉVÉNEMENTS URBAINS (GraphQL)
+  # ============================================================
+  urban-events-graphql:
+    build:
+      context: ./services/urban-events-graphql-service
+      dockerfile: Dockerfile
+    container_name: urban-events-graphql-service
+    environment:
+      LOG_LEVEL: INFO
+      PYTHONUNBUFFERED: 1
+      SERVICE_NAME: urban-events-graphql-service
+      SERVICE_PORT: 8004
+    ports:
+      - "8004:8004"
+    networks:
+      - smart-city-network
+    volumes:
+      - ./services/urban-events-graphql-service/logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.post('http://localhost:8004/graphql', json={'query': '{ __typename }'})"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # ============================================================
+  # API GATEWAY (FastAPI)
+  # ============================================================
+  api-gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: smart-city-api-gateway
+    environment:
+      # Configuration de la Gateway
+      APP_NAME: "Smart City API Gateway"
+      APP_VERSION: "1.0.0"
+      DEBUG: "True"
+      HOST: "0.0.0.0"
+      PORT: "8080"
+      LOG_LEVEL: "INFO"
+      
+      # URLs des microservices
+      MOBILITY_SERVICE_URL: "http://mobility-service:8000"
+      AIR_QUALITY_WSDL_URL: "http://air-quality-soap-service:8000/?wsdl"
+      AIR_QUALITY_SERVICE_URL: "http://air-quality-soap-service:8000/"
+      EMERGENCY_GRPC_HOST: "emergency-grpc"
+      EMERGENCY_GRPC_PORT: "50051"
+      URBAN_EVENTS_GRAPHQL_URL: "http://urban-events-graphql:8004/graphql"
+      
+      # Timeouts (en secondes)
+      REST_TIMEOUT: "10"
+      SOAP_TIMEOUT: "15"
+      GRPC_TIMEOUT: "10"
+      GRAPHQL_TIMEOUT: "10"
+      
+      # Retry
+      MAX_RETRIES: "3"
+      RETRY_DELAY: "2"
+    ports:
+      - "8080:8080"
+    depends_on:
+      mobility-service:
+        condition: service_healthy
+      air-quality-soap-service:
+        condition: service_healthy
+      emergency-grpc:
+        condition: service_healthy
+      urban-events-graphql:
+        condition: service_healthy
+    networks:
+      - smart-city-network
+    volumes:
+      - ./gateway/logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8080/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+# ============================================================
+# INFORMATIONS
+# ============================================================
+# 
+# Services exposés:
+# - API Gateway:          http://localhost:8080
+# - Mobility (REST):      http://localhost:8000
+# - Air Quality (SOAP):   http://localhost:8001
+# - Emergency (gRPC):     localhost:50051
+# - Urban Events (GraphQL): http://localhost:8004
+# - PostgreSQL:           localhost:5433
+#
+# Documentation Gateway:
+# - Swagger UI:  http://localhost:8080/docs
+# - ReDoc:       http://localhost:8080/redoc
+# - OpenAPI:     http://localhost:8080/openapi.json
+#
+# Commandes:
+# - Démarrer:    docker-compose up -d
+# - Logs:        docker-compose logs -f api-gateway
+# - Arrêter:     docker-compose down
+# - Rebuild:     docker-compose up -d --build
+#
+# ============================================================
