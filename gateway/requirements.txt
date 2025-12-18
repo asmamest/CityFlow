@@ -1,0 +1,31 @@
+# FastAPI et serveur
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+
+# Clients HTTP
+httpx
+requests
+
+# SOAP
+zeep
+lxml
+
+# gRPC
+grpcio
+grpcio-tools
+protobuf
+
+# GraphQL
+gql[all]
+aiohttp
+
+# Logging et monitoring
+python-json-logger
+loguru
+
+# Utilitaires
+python-dotenv
+python-multipart
+asyncio
