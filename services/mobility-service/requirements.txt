@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+pydantic           # version mise à jour compatible Python 3.13
+pydantic-settings
+python-multipart
+requests
+
+
+
+sqlalchemy
+psycopg2-binary
