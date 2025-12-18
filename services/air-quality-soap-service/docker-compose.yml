@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  # Base de données PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: smart-city-postgres
+    environment:
+      POSTGRES_USER: mobility_user
+      POSTGRES_PASSWORD: mobility_pass
+      POSTGRES_DB: mobility_db
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - smart-city-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mobility_user -d mobility_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Service SOAP Air Quality
+  air-quality-soap-service:
+    build:
+      context: ./services/air-quality-soap-service
+      dockerfile: Dockerfile
+    container_name: air-quality-soap-service
+    environment:
+      # Configuration du service
+      HOST: 0.0.0.0
+      PORT: 8000
+      LOG_LEVEL: INFO
+      
+      # ⚠️ IMPORTANT: Utiliser 'postgres' comme host (nom du conteneur)
+      DATABASE_URL: postgresql+psycopg2://mobility_user:mobility_pass@smart-city-postgres:5432/mobility_db
+
+      
+      # Configuration optionnelle
+      PYTHONUNBUFFERED: 1
+      PYTHONDONTWRITEBYTECODE: 1
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./services/air-quality-soap-service/logs:/app/logs
+      - ./services/air-quality-soap-service/data:/app/data
+    networks:
+      - smart-city-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/?wsdl || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # Adminer (interface web pour PostgreSQL) - OPTIONNEL
+  adminer:
+    image: adminer:latest
+    container_name: smart-city-adminer
+    environment:
+      ADMINER_DEFAULT_SERVER: smart-city-postgres
+
+    ports:
+      - "8080:8080"
+    networks:
+      - smart-city-network
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+networks:
+  smart-city-network:
+    name: smart-city-network
+    driver: bridge
+    external: true
+
+volumes:
+  postgres_data:
+    name: smart-city-postgres-data

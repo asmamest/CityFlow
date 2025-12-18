@@ -1,0 +1,26 @@
+# SOAP Framework
+spyne
+lxml
+sqlalchemy
+psycopg2-binary
+fastapi
+uvicorn[standard]
+# Web Server
+gunicorn
+
+# SOAP Client (pour tests)
+zeep
+
+# Testing
+pytest
+pytest-cov
+
+# Utilities
+requests
+python-dotenv
+pydantic
+python-multipart
+# Linting (optionnel)
+ruff
+
+colorlog
