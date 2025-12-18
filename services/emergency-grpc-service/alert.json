@@ -1,0 +1,18 @@
+{
+  "type": 2,
+  "description": "Incendie dans un bâtiment administratif, intervention urgente requise",
+  "location": {
+    "latitude": 48.8566,
+    "longitude": 2.3522,
+    "address": "1 Rue de la Paix",
+    "city": "Paris",
+    "zone": "Zone Centre"
+  },
+  "priority": 3,
+  "reporter_name": "Sophie Leroy",
+  "reporter_phone": "+33699887766",
+  "affected_people": 0
+}
+
+
+
