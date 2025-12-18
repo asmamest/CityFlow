@@ -1,0 +1,136 @@
+"""Root Query pour les événements urbains"""
+type Query {
+  """Liste de toutes les zones urbaines"""
+  zones: [ZoneType]
+
+  """Récupère une zone par son ID"""
+  zone(zoneId: String!): ZoneType
+
+  """Liste de tous les types d'événements"""
+  eventTypes: [EventTypeType]
+
+  """Récupère un type d'événement par son ID"""
+  eventType(typeId: String!): EventTypeType
+
+  """Liste des événements avec filtres optionnels"""
+  events(eventTypeId: String, zoneId: String, status: String, priority: String, dateFrom: String, dateTo: String): [EventType]
+
+  """Récupère un événement par son ID"""
+  event(eventId: String!): EventType
+}
+
+"""Type GraphQL pour Zone"""
+type ZoneType {
+  """ID unique de la zone"""
+  id: String
+
+  """Nom de la zone"""
+  name: String
+
+  """Description de la zone"""
+  description: String
+}
+
+"""Type GraphQL pour EventType"""
+type EventTypeType {
+  """ID unique du type d'événement"""
+  id: String
+
+  """Nom du type"""
+  name: String
+
+  """Description du type"""
+  description: String
+}
+
+"""Type GraphQL pour Event"""
+type EventType {
+  """ID unique de l'événement"""
+  id: String
+
+  """Nom de l'événement"""
+  name: String
+
+  """Description détaillée"""
+  description: String
+
+  """ID du type d'événement"""
+  eventTypeId: String
+
+  """ID de la zone"""
+  zoneId: String
+
+  """Date de l'événement (ISO format)"""
+  date: String
+
+  """Priorité: LOW, MEDIUM, HIGH, CRITICAL"""
+  priority: String
+
+  """Statut: PENDING, IN_PROGRESS, RESOLVED, CANCELLED"""
+  status: String
+
+  """Date de création"""
+  createdAt: String
+
+  """Date de dernière mise à jour"""
+  updatedAt: String
+
+  """Type d'événement complet"""
+  eventType: EventTypeType
+
+  """Zone complète"""
+  zone: ZoneType
+}
+
+"""Root Mutation"""
+type Mutation {
+  """Mutation pour créer un événement"""
+  createEvent(
+    """Date ISO format"""
+    date: String!
+
+    """Description"""
+    description: String!
+
+    """ID du type"""
+    eventTypeId: String!
+
+    """Nom de l'événement"""
+    name: String!
+
+    """LOW, MEDIUM, HIGH, CRITICAL"""
+    priority: String!
+
+    """PENDING, IN_PROGRESS, RESOLVED, CANCELLED"""
+    status: String
+
+    """ID de la zone"""
+    zoneId: String!
+  ): CreateEvent
+
+  """Mutation pour mettre à jour un événement"""
+  updateEvent(date: String, description: String, eventId: String!, eventTypeId: String, name: String, priority: String, status: String, zoneId: String): UpdateEvent
+
+  """Mutation pour supprimer un événement"""
+  deleteEvent(eventId: String!): DeleteEvent
+}
+
+"""Mutation pour créer un événement"""
+type CreateEvent {
+  event: EventType
+  success: Boolean
+  message: String
+}
+
+"""Mutation pour mettre à jour un événement"""
+type UpdateEvent {
+  event: EventType
+  success: Boolean
+  message: String
+}
+
+"""Mutation pour supprimer un événement"""
+type DeleteEvent {
+  success: Boolean
+  message: String
+}

@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+graphene
+starlette-graphene3
+pydantic
+pytest
+pytest-asyncio
+python-dateutil
+requests
+
